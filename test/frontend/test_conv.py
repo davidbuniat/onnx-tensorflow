@@ -8,7 +8,6 @@ from onnx import helper
 import onnx
 from onnx_tf.backend import prepare
 
-
 def load_graph(frozen_graph_filename):
     # We load the protobuf file from the disk and parse it to retrieve the
     # unserialized graph_def
@@ -72,7 +71,7 @@ def get_node_by_name(nodes, name):
 
 x = tf.placeholder(dtype=tf.float32, shape=[8,16,17,32])
 y = tf.nn.conv2d(x
-    ,filter=tf.Variable(tf.random_normal([1, 1, 31, 31]))
+    ,filter=tf.Variable(tf.random_normal([1, 1, 32, 31]))
     ,strides=[1, 4, 4, 1]
     ,padding='VALID'
     ,data_format='NHWC'
