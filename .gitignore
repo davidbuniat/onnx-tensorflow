@@ -45,6 +45,8 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
+test/frontend/dest
+
 
 # Translations
 *.mo

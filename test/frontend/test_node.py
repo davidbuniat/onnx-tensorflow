@@ -54,15 +54,7 @@ def create_test(test_data):
     tf_param_list = []
     for idx, input_tensor in enumerate(inputs):
       if type(input_tensor) is np.ndarray:
-        placeholder = tf.placeholder(input_tensor.dtype,
-                                     shape=input_tensor.shape,
-                                     name="in_" + str(idx))
-        onnx_feed_dict["in_" + str(idx)] = input_tensor
-        tf_feed_dict[placeholder] = input_tensor
-        tf_param_list.append(placeholder)
-      else:
-        tf_param_list.append(input_tensor)
-    test_op = tf_op(*tf_param_list, **attrs)
+      x = tf.placeholder(tf.float32, [None, 784])
     tf_graph = tf.get_default_graph().as_graph_def(add_shapes=True)
     # Construct onnx graph, run with backend.
     output_node = get_node_by_name(tf_graph.node, output_name)

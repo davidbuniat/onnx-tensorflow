@@ -25,11 +25,17 @@ from onnx.helper import (
 from onnx.onnx_pb2 import GraphProto, TensorProto, AttributeProto
 from tensorflow.python.framework.tensor_util import MakeNdarray
 
-class TensorflowNode(object):
 
+def get_tf_shape_as_list_valid(dim):
+  shape = get_tf_shape_as_list(dim)
+  if len(shape)>0 and shape[0] == -1:
+    shape[0] = 1
+  return shape
+
+class TensorflowNode(object):
   # Keyed by old attribute names.
   attr_translator = {
-    "_output_shapes": lambda self, x: list(map(lambda shape: get_tf_shape_as_list(shape.dim), x.list.shape)),
+    "_output_shapes": lambda self, x: list(map(lambda shape: get_tf_shape_as_list_valid(shape.dim), x.list.shape)),
     "shape": lambda self, x: get_tf_shape_as_list(x.shape.dim),
     "T": lambda self, x: self.type_converter(x),
     "dtype": lambda self, x: self.type_converter(x),
@@ -38,6 +44,7 @@ class TensorflowNode(object):
     "seed": lambda self, x: float(x.i),
     "keep_dims": lambda self, x: int(x.b),
     "squeeze_dims": lambda self, x: list(x.list.i),
+    "strides": lambda self, x: list(x.list.i),
   }
 
   def __init__(self, node_proto):
@@ -110,6 +117,9 @@ class TensorflowFrontend(object):
         # TODO: currently `dtype` is translated to `to`.
         onnx_type = node.attr["dtype"]
         shape = node.attr["shape"]
+        if shape[0] == -1:
+          shape[0] = 1
+
         input_proto = make_tensor_value_info(node.name,
                                              onnx_type,
                                              shape)
@@ -149,7 +159,6 @@ class TensorflowFrontend(object):
                                    **node.attr))
       else:
         handler_name = "handle_" + op_name_to_lower(node.op)
-
         # Check if specialized handler exists.
         if handler_name in dir(cls):
           method_to_call = getattr(cls, handler_name)
@@ -158,6 +167,7 @@ class TensorflowFrontend(object):
           raise NotImplementedError("{} op is not implemented.".format(node.op))
 
     output = TensorflowNode(output)
+
     # making output proto
     # TODO: deal with multi-output case.
     # TODO: default to BOOL, cf.
@@ -165,7 +175,7 @@ class TensorflowFrontend(object):
     output_onnx_type = output.attr.get("T", TensorProto.BOOL)
     output_proto = make_tensor_value_info(output.name,
                                           output_onnx_type,
-                                          output.attr["_output_shapes"][0])
+                                          shape)
     return make_graph(ops_proto,
                       name,
                       inputs_proto,
@@ -264,6 +274,34 @@ class TensorflowFrontend(object):
   @classmethod
   def handle_sum(cls, node, consts):
     return cls._reduce_op("ReduceSum", node, consts)
+
+  @classmethod
+  def handle_identity(cls, node, consts):
+    return helper.make_node("Identity",
+                            [node.inputs[0]],
+                            [node.name])
+  @classmethod
+  def handle_conv2_d(cls, node, consts):
+
+    attr = node.attr
+    W_name = '/'.join(node.inputs[1].split('/')[:-1])
+    shape = list(consts[W_name].shape)
+
+    strides = attr.get('strides')
+
+    pads = [0,0,0,0] #assumes VALID
+    if attr.get('padding') == "SAME":
+      #FIXME implement padding
+      pads = [0,0,0,0]
+    node = helper.make_node("Conv",
+                            [node.inputs[0], node.inputs[1]],
+                            [node.name],
+                            #dilations=None,
+                            #group = attr.get('T'),
+                            kernel_shape=shape,
+                            pads=pads,
+                            strides=strides)
+    return node
 
   @classmethod
   def handle_reshape(cls, node, consts):
